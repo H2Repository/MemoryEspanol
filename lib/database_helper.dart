@@ -32,6 +32,7 @@ class DatabaseHelper {
     try {
       var excel = Excel.decodeBytes(bytes);
       int addedCount = 0;
+      final nowIso = DateTime.now().toIso8601String();
 
       for (var table in excel.tables.keys) {
         var sheet = excel.tables[table];
@@ -60,6 +61,7 @@ class DatabaseHelper {
                 'english': english,
                 'grammar': grammar,
                 'status': 0,
+                'status_updated_at': nowIso,
               });
               addedCount++;
             }
@@ -81,17 +83,37 @@ class DatabaseHelper {
     }
   }
 
-  Future<List<Word>> searchWords(String query, int? statusFilter) async {
+  Future<List<Word>> searchWords(String query, String filterType) async {
     try {
-      var queryBuilder = _client.from('words').select();
-
-      if (statusFilter != null) {
-        queryBuilder = queryBuilder.eq('status', statusFilter);
-      }
-
-      final response = await queryBuilder.order('id', ascending: true);
+      final response = await _client.from('words').select().order('id', ascending: true);
       var words = (response as List).map((map) => Word.fromMap(map)).toList();
 
+      final now = DateTime.now();
+
+      // Filter by type
+      if (filterType == 'study_due') {
+        words = words.where((w) {
+          if (w.status == 0) return true; // 미학습은 항상 학습 대상
+          if (w.status == 5) return false; // 외움 완료는 복습 대상 아님
+          if (w.statusUpdatedAt == null) return false;
+
+          final updatedAt = w.statusUpdatedAt!.toLocal();
+          final diffDays = now.difference(updatedAt).inDays;
+
+          if (w.status == 1 && diffDays >= 3) return true;  // 3일 후 (3일 이상 경과)
+          if (w.status == 2 && diffDays >= 7) return true;  // 1주일 후 (7일 이상 경과)
+          if (w.status == 3 && diffDays >= 14) return true; // 2주일 후 (14일 이상 경과)
+          if (w.status == 4 && diffDays >= 30) return true; // 한달 후 (30일 이상 경과)
+          return false;
+        }).toList();
+      } else if (filterType != 'all') {
+        int? statusVal = int.tryParse(filterType);
+        if (statusVal != null) {
+          words = words.where((w) => w.status == statusVal).toList();
+        }
+      }
+
+      // Filter by search query
       if (query.trim().isNotEmpty) {
         final q = query.toLowerCase();
         words = words.where((w) =>
@@ -112,14 +134,20 @@ class DatabaseHelper {
 
   Future<void> insertWord(Word word) async {
     try {
-      await _client.from('words').insert(word.toMap());
+      final nowIso = DateTime.now().toIso8601String();
+      final map = word.toMap();
+      map['status_updated_at'] = nowIso;
+      await _client.from('words').insert(map);
     } catch (_) {}
   }
 
   Future<void> updateWord(Word word) async {
     try {
       if (word.id != null) {
-        await _client.from('words').update(word.toMap()).eq('id', word.id!);
+        final nowIso = DateTime.now().toIso8601String();
+        final map = word.toMap();
+        map['status_updated_at'] = nowIso;
+        await _client.from('words').update(map).eq('id', word.id!);
       }
     } catch (_) {}
   }
@@ -132,13 +160,21 @@ class DatabaseHelper {
 
   Future<void> updateWordStatus(int id, int newStatus) async {
     try {
-      await _client.from('words').update({'status': newStatus}).eq('id', id);
+      final nowIso = DateTime.now().toIso8601String();
+      await _client.from('words').update({
+        'status': newStatus,
+        'status_updated_at': nowIso,
+      }).eq('id', id);
     } catch (_) {}
   }
 
   Future<void> resetAllWords() async {
     try {
-      await _client.from('words').update({'status': 0}).gte('id', 0);
+      final nowIso = DateTime.now().toIso8601String();
+      await _client.from('words').update({
+        'status': 0,
+        'status_updated_at': nowIso,
+      }).gte('id', 0);
     } catch (_) {}
   }
 
@@ -155,6 +191,8 @@ class DatabaseHelper {
         TextCellValue('Vietnamese'),
         TextCellValue('English'),
         TextCellValue('Grammar'),
+        TextCellValue('Status'),
+        TextCellValue('StatusUpdatedAt'),
       ]);
 
       final words = await getAllWords();
@@ -166,6 +204,8 @@ class DatabaseHelper {
           TextCellValue(w.vietnamese),
           TextCellValue(w.english),
           TextCellValue(w.grammar),
+          IntCellValue(w.status),
+          TextCellValue(w.statusUpdatedAt?.toIso8601String() ?? ''),
         ]);
       }
 

@@ -70,14 +70,15 @@ class _WordListScreenState extends State<WordListScreen> {
   List<Word> _filteredWords = [];
   bool _isLoading = true;
   String _searchQuery = '';
-  int? _selectedStatusFilter = 0; // Default to 0: 미학습
+  String _selectedFilterType = 'study_due'; // Default on app open: '단어 학습'
 
   final Map<int, String> _statusNames = {
     0: '미학습',
-    1: '1주일 후',
-    2: '2주일 후',
-    3: '한달 후',
-    4: '외움 완료',
+    1: '3일 후',
+    2: '1주일 후',
+    3: '2주일 후',
+    4: '한달 후',
+    5: '외움 완료',
   };
 
   @override
@@ -90,7 +91,7 @@ class _WordListScreenState extends State<WordListScreen> {
     setState(() {
       _isLoading = true;
     });
-    final words = await DatabaseHelper.instance.searchWords(_searchQuery, _selectedStatusFilter);
+    final words = await DatabaseHelper.instance.searchWords(_searchQuery, _selectedFilterType);
     final all = await DatabaseHelper.instance.getAllWords();
     if (!mounted) return;
     setState(() {
@@ -166,18 +167,25 @@ class _WordListScreenState extends State<WordListScreen> {
     try {
       final bytes = await DatabaseHelper.instance.exportToExcel();
       if (!mounted) return;
-      if (bytes != null) {
-        String? path = await FilePicker.platform.saveFile(
-          dialogTitle: '엑셀 파일 저장',
-          fileName: 'vocabulary_export.xlsx',
-          bytes: bytes,
+      if (bytes == null || bytes.isEmpty) {
+        messenger.showSnackBar(
+          const SnackBar(content: Text('다운로드할 단어 데이터가 없습니다.')),
         );
-        if (!mounted) return;
-        if (path != null) {
-          messenger.showSnackBar(
-            const SnackBar(content: Text('엑셀 파일이 성공적으로 다운로드되었습니다.')),
-          );
-        }
+        return;
+      }
+
+      String? path = await FilePicker.platform.saveFile(
+        dialogTitle: '전체 엑셀 파일 저장',
+        fileName: 'vocabulary_export.xlsx',
+      );
+
+      if (!mounted) return;
+      if (path != null) {
+        final file = File(path);
+        await file.writeAsBytes(bytes);
+        messenger.showSnackBar(
+          const SnackBar(content: Text('전체 엑셀 파일이 성공적으로 다운로드되었습니다.')),
+        );
       }
     } catch (e) {
       if (!mounted) return;
@@ -473,78 +481,33 @@ class _WordListScreenState extends State<WordListScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Search & Filters
-          if (isMobile) ...[
-            TextField(
-              decoration: InputDecoration(
-                hintText: '단어, 뜻, 발음, 영어 실시간 검색...',
-                prefixIcon: const Icon(Icons.search, size: 18),
-                filled: true,
-                fillColor: const Color(0xFF161B22),
-                contentPadding: const EdgeInsets.symmetric(vertical: 8),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
-              ),
-              onChanged: (val) {
-                setState(() {
-                  _searchQuery = val;
-                });
-                _loadData();
-              },
-            ),
-            const SizedBox(height: 8),
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  _buildFilterPill('미학습', 0),
-                  const SizedBox(width: 6),
-                  _buildFilterPill('1주일 후', 1),
-                  const SizedBox(width: 6),
-                  _buildFilterPill('2주일 후', 2),
-                  const SizedBox(width: 6),
-                  _buildFilterPill('한달 후', 3),
-                  const SizedBox(width: 6),
-                  _buildFilterPill('외움 완료', 4),
-                  const SizedBox(width: 6),
-                  _buildFilterPill('전체', null),
-                ],
-              ),
-            ),
-          ] else ...[
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    decoration: InputDecoration(
-                      hintText: '단어, 뜻, 발음, 영어, 베트남어 실시간 검색...',
-                      prefixIcon: const Icon(Icons.search),
-                      filled: true,
-                      fillColor: const Color(0xFF161B22),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
-                    ),
-                    onChanged: (val) {
-                      setState(() {
-                        _searchQuery = val;
-                      });
-                      _loadData();
-                    },
+          // Search, Study Button & Dropdown Filter (All on one single line)
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  decoration: InputDecoration(
+                    hintText: '단어, 뜻, 발음 검색...',
+                    prefixIcon: const Icon(Icons.search, size: 18),
+                    filled: true,
+                    fillColor: const Color(0xFF161B22),
+                    contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
                   ),
+                  onChanged: (val) {
+                    setState(() {
+                      _searchQuery = val;
+                    });
+                    _loadData();
+                  },
                 ),
-                const SizedBox(width: 16),
-                Wrap(
-                  spacing: 8,
-                  children: [
-                    _buildFilterPill('미학습', 0),
-                    _buildFilterPill('1주일 후', 1),
-                    _buildFilterPill('2주일 후', 2),
-                    _buildFilterPill('한달 후', 3),
-                    _buildFilterPill('외움 완료', 4),
-                    _buildFilterPill('전체', null),
-                  ],
-                ),
-              ],
-            ),
-          ],
+              ),
+              const SizedBox(width: 8),
+              _buildStudyFilterButton(),
+              const SizedBox(width: 8),
+              _buildFilterDropdown(isMobile),
+            ],
+          ),
           const SizedBox(height: 10),
 
           // Action bar above table
@@ -691,21 +654,74 @@ class _WordListScreenState extends State<WordListScreen> {
     );
   }
 
-  Widget _buildFilterPill(String label, int? status) {
-    bool isSelected = _selectedStatusFilter == status;
+  Widget _buildStudyFilterButton() {
+    bool isStudyActive = _selectedFilterType == 'study_due';
     return MouseRegion(
       cursor: SystemMouseCursors.click,
-      child: ChoiceChip(
-        label: Text(label, style: TextStyle(fontSize: 11, color: isSelected ? Colors.white : Colors.grey)),
-        selected: isSelected,
-        selectedColor: Colors.green,
-        backgroundColor: const Color(0xFF161B22),
-        onSelected: (selected) {
+      child: ElevatedButton.icon(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: isStudyActive ? Colors.green : const Color(0xFF21262D),
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+        icon: Icon(Icons.school, size: 16, color: isStudyActive ? Colors.white : Colors.greenAccent),
+        label: const Text('학습할 단어(도래)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+        onPressed: () {
           setState(() {
-            _selectedStatusFilter = selected ? status : null;
+            _selectedFilterType = 'study_due';
           });
           _loadData();
         },
+      ),
+    );
+  }
+
+  Widget _buildFilterDropdown(bool isMobile) {
+    final Map<String, String> filterOptions = {
+      '0': '미학습',
+      '1': '3일 후',
+      '2': '1주일 후',
+      '3': '2주일 후',
+      '4': '한달 후',
+      '5': '외움 완료',
+      'all': '전체',
+    };
+
+    String? dropdownValue = filterOptions.containsKey(_selectedFilterType) ? _selectedFilterType : null;
+
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        decoration: BoxDecoration(
+          color: const Color(0xFF161B22),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.white24),
+        ),
+        child: DropdownButtonHideUnderline(
+          child: DropdownButton<String>(
+            value: dropdownValue,
+            hint: const Text('상태별 보기', style: TextStyle(color: Colors.grey, fontSize: 13)),
+            dropdownColor: const Color(0xFF161B22),
+            style: const TextStyle(color: Colors.white, fontSize: 13),
+            icon: const Icon(Icons.arrow_drop_down, color: Colors.greenAccent),
+            items: filterOptions.entries.map((e) {
+              return DropdownMenuItem<String>(
+                value: e.key,
+                child: Text(e.value, style: const TextStyle(color: Colors.white)),
+              );
+            }).toList(),
+            onChanged: (val) {
+              if (val != null) {
+                setState(() {
+                  _selectedFilterType = val;
+                });
+                _loadData();
+              }
+            },
+          ),
+        ),
       ),
     );
   }
@@ -776,6 +792,10 @@ class _StudyScreenState extends State<StudyScreen> {
 
     if (newStatus != null) {
       await DatabaseHelper.instance.updateWordStatus(currentWord.id!, newStatus);
+      widget.words[_studyIndex] = currentWord.copyWith(
+        status: newStatus,
+        statusUpdatedAt: DateTime.now(),
+      );
     }
 
     if (!mounted) return;
@@ -1210,7 +1230,7 @@ class _StudyScreenState extends State<StudyScreen> {
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                           ),
                           onPressed: () {
-                            int nextStatus = word.status < 4 ? word.status + 1 : 4;
+                            int nextStatus = word.status < 5 ? word.status + 1 : 5;
                             _handleStudyAction(nextStatus);
                           },
                           child: const Row(
@@ -1218,7 +1238,7 @@ class _StudyScreenState extends State<StudyScreen> {
                             children: [
                               Icon(Icons.check_circle_outline, size: 16),
                               SizedBox(width: 4),
-                              Text('외움', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                              Text('외움', style: TextStyle(color: Colors.greenAccent, fontSize: 15, fontWeight: FontWeight.bold)),
                             ],
                           ),
                         ),

@@ -6,7 +6,8 @@ class Word {
   final String vietnamese;
   final String english;
   final String grammar;
-  final int status; // 0: 미학습, 1: 1주일 후, 2: 2주일 후, 3: 한달 후, 4: 외움 완료
+  final int status; // 0: 미학습, 1: 3일 후, 2: 1주일 후, 3: 2주일 후, 4: 한달 후, 5: 외움 완료
+  final DateTime? statusUpdatedAt;
 
   Word({
     this.id,
@@ -17,6 +18,7 @@ class Word {
     required this.english,
     required this.grammar,
     required this.status,
+    this.statusUpdatedAt,
   });
 
   Map<String, dynamic> toMap() {
@@ -29,6 +31,7 @@ class Word {
       'english': english,
       'grammar': grammar,
       'status': status,
+      'status_updated_at': statusUpdatedAt?.toIso8601String() ?? DateTime.now().toIso8601String(),
     };
   }
 
@@ -42,6 +45,7 @@ class Word {
       english: map['english'] ?? '',
       grammar: map['grammar'] ?? '',
       status: map['status'] ?? 0,
+      statusUpdatedAt: map['status_updated_at'] != null ? DateTime.tryParse(map['status_updated_at'].toString()) : null,
     );
   }
 
@@ -54,6 +58,7 @@ class Word {
     String? english,
     String? grammar,
     int? status,
+    DateTime? statusUpdatedAt,
   }) {
     return Word(
       id: id ?? this.id,
@@ -64,6 +69,7 @@ class Word {
       english: english ?? this.english,
       grammar: grammar ?? this.grammar,
       status: status ?? this.status,
+      statusUpdatedAt: statusUpdatedAt ?? this.statusUpdatedAt,
     );
   }
 }
