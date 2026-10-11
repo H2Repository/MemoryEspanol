@@ -1,6 +1,6 @@
 # memoryespanol
 
-안드로이드 스튜디오에서 작성
+안드로이드 스튜디오에서 작성 - 스페인어 공부를 위해 단어 암기를 위한 앱
 
 A new Flutter project.
 
