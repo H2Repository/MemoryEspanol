@@ -9,6 +9,15 @@ import 'package:flutter_tts/flutter_tts.dart';
 import 'database_helper.dart';
 import 'word_model.dart';
 
+const Map<int, String> kStatusNames = {
+  0: '미학습',
+  1: '3일 후',
+  2: '1주일 후',
+  3: '2주일 후',
+  4: '한달 후',
+  5: '외움 완료',
+};
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   try {
@@ -32,7 +41,7 @@ class MemoryEspanolApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: '스페인어 단어 학습',
+      title: '단어공부',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: Brightness.dark,
@@ -658,21 +667,24 @@ class _WordListScreenState extends State<WordListScreen> {
     bool isStudyActive = _selectedFilterType == 'study_due';
     return MouseRegion(
       cursor: SystemMouseCursors.click,
-      child: ElevatedButton.icon(
-        style: ElevatedButton.styleFrom(
-          backgroundColor: isStudyActive ? Colors.green : const Color(0xFF21262D),
-          foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      child: SizedBox(
+        height: 42,
+        child: ElevatedButton.icon(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: isStudyActive ? Colors.green : const Color(0xFF21262D),
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 0),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          ),
+          icon: Icon(Icons.school, size: 16, color: isStudyActive ? Colors.white : Colors.greenAccent),
+          label: const Text('학습할 단어(도래)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+          onPressed: () {
+            setState(() {
+              _selectedFilterType = 'study_due';
+            });
+            _loadData();
+          },
         ),
-        icon: Icon(Icons.school, size: 16, color: isStudyActive ? Colors.white : Colors.greenAccent),
-        label: const Text('학습할 단어(도래)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-        onPressed: () {
-          setState(() {
-            _selectedFilterType = 'study_due';
-          });
-          _loadData();
-        },
       ),
     );
   }
@@ -692,34 +704,38 @@ class _WordListScreenState extends State<WordListScreen> {
 
     return MouseRegion(
       cursor: SystemMouseCursors.click,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-        decoration: BoxDecoration(
-          color: const Color(0xFF161B22),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: Colors.white24),
-        ),
-        child: DropdownButtonHideUnderline(
-          child: DropdownButton<String>(
-            value: dropdownValue,
-            hint: const Text('상태별 보기', style: TextStyle(color: Colors.grey, fontSize: 13)),
-            dropdownColor: const Color(0xFF161B22),
-            style: const TextStyle(color: Colors.white, fontSize: 13),
-            icon: const Icon(Icons.arrow_drop_down, color: Colors.greenAccent),
-            items: filterOptions.entries.map((e) {
-              return DropdownMenuItem<String>(
-                value: e.key,
-                child: Text(e.value, style: const TextStyle(color: Colors.white)),
-              );
-            }).toList(),
-            onChanged: (val) {
-              if (val != null) {
-                setState(() {
-                  _selectedFilterType = val;
-                });
-                _loadData();
-              }
-            },
+      child: SizedBox(
+        height: 42,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            color: const Color(0xFF161B22),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.white24),
+          ),
+          alignment: Alignment.center,
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: dropdownValue,
+              hint: const Text('상태별 보기', style: TextStyle(color: Colors.grey, fontSize: 13)),
+              dropdownColor: const Color(0xFF161B22),
+              style: const TextStyle(color: Colors.white, fontSize: 13),
+              icon: const Icon(Icons.arrow_drop_down, color: Colors.greenAccent),
+              items: filterOptions.entries.map((e) {
+                return DropdownMenuItem<String>(
+                  value: e.key,
+                  child: Text(e.value, style: const TextStyle(color: Colors.white)),
+                );
+              }).toList(),
+              onChanged: (val) {
+                if (val != null) {
+                  setState(() {
+                    _selectedFilterType = val;
+                  });
+                  _loadData();
+                }
+              },
+            ),
           ),
         ),
       ),
@@ -949,7 +965,27 @@ class _StudyScreenState extends State<StudyScreen> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    const Text('단어 & 발음', style: TextStyle(color: Colors.greenAccent, fontSize: 12, fontWeight: FontWeight.w500)),
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        const Text('단어 & 발음', style: TextStyle(color: Colors.greenAccent, fontSize: 12, fontWeight: FontWeight.w500)),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: word.status == 0 ? Colors.orange.withValues(alpha: 0.2) : Colors.green.withValues(alpha: 0.2),
+                                            borderRadius: BorderRadius.circular(4),
+                                          ),
+                                          child: Text(
+                                            kStatusNames[word.status] ?? '미학습',
+                                            style: TextStyle(
+                                              color: word.status == 0 ? Colors.orangeAccent : Colors.greenAccent,
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                     const SizedBox(height: 4),
                                     Text(
                                       _hideWord ? '••••••' : '${word.word} ${word.pronunciation.isNotEmpty ? '[${word.pronunciation}]' : ''}',
@@ -958,6 +994,7 @@ class _StudyScreenState extends State<StudyScreen> {
                                   ],
                                 ),
                               ),
+                              const SizedBox(width: 12),
                               MouseRegion(
                                 cursor: SystemMouseCursors.click,
                                 child: GestureDetector(
